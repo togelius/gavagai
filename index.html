@@ -91,11 +91,25 @@
     font-family: ui-monospace, 'SF Mono', Menlo, monospace;
     font-size: 11px;
     color: var(--dim);
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: crosshair;
     white-space: pre;
     line-height: 1.05;
     z-index: 4;
     opacity: .55;
+    transition: opacity .25s ease-out, filter .25s ease-out;
+  }
+  .rabbit:hover { opacity: .85; filter: drop-shadow(0 0 8px rgba(217, 119, 87, .3)); }
+  .shard {
+    position: fixed;
+    pointer-events: none;
+    font-family: ui-serif, Georgia, 'Times New Roman', serif;
+    font-variant: small-caps;
+    letter-spacing: .06em;
+    white-space: nowrap;
+    opacity: 0;
+    will-change: opacity, transform;
+    z-index: 6;
   }
   .quote {
     position: fixed;
@@ -238,6 +252,34 @@
     "  (\\(\\\n  (o.o)\n o_(\")(\")"
   ];
 
+  const RABBIT_PARTS = [
+    "ear", "eye", "fur", "foot", "paw", "nose", "tail",
+    "flank", "whisker", "haunch", "the soft part",
+    "the warm part", "what was here a moment ago",
+    "undetached", "stage of —", "rabbit(t)", "rabbit(t-1)",
+    "rabbit(t+1)", "this-here-furring", "leporid · slice",
+    "fusion", "mereological sum", "a brief warmth"
+  ];
+
+  const WORD_PIECES = [
+    "ga", "va", "gai", "gav", "aga", "vagai",
+    "g·", "·a·", "·gai", "—", "?", "g", "a", "i",
+    "g a v", "v a g", "·", "·-·", "…ai", "ga—"
+  ];
+
+  const MEANING_PIECES = [
+    "rabbithood", "leporid-ness", "presence", "warmth",
+    "this-here", "that-which-was", "a leaping",
+    "softmax → ?", "p(?|here)", "[unresolved referent]",
+    "argmax · ?", "the name is not the named",
+    "what the field linguist meant", "behaviorally identical",
+    "stimulus equivalent", "translation manual A",
+    "translation manual B", "incompatible · compatible",
+    "the meaning that didn't carry over"
+  ];
+
+  const SHARD_POOLS = [RABBIT_PARTS, WORD_PIECES, MEANING_PIECES];
+
   const QUOTES = [
     "for, consider “gavagai.” who knows but that the objects to which this term applies are not rabbits at all, but mere stages, or brief temporal segments, of rabbits?",
     "in either event the stimulus situations that prompt assent to “gavagai” would be the same as for “rabbit.”",
@@ -251,10 +293,29 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+  // The page maintains a slowly-drifting "manual of translation":
+  // an overlapping subset of TRANSLATIONS that's weighted up.
+  // Every few minutes the subset rotates, so the lexicon you saw
+  // ten minutes ago is not quite the lexicon you see now.
+  // The visitor is never told which manual is active.
+  let manual = sampleManual();
+  function sampleManual() {
+    const size = Math.floor(rand(8, 16));
+    const seen = new Set();
+    while (seen.size < size) seen.add(Math.floor(Math.random() * TRANSLATIONS.length));
+    return [...seen];
+  }
+  function pickTranslation() {
+    return Math.random() < 0.62
+      ? TRANSLATIONS[pick(manual)]
+      : pick(TRANSLATIONS);
+  }
+  setInterval(() => { manual = sampleManual(); }, 1000 * 60 * 2.5);
+
   function spawnFragment() {
     const el = document.createElement("div");
     el.className = "frag";
-    el.textContent = pick(TRANSLATIONS);
+    el.textContent = pickTranslation();
     const x = rand(3, 90);
     const yStart = rand(72, 96);
     const yEnd = rand(2, 38);
@@ -295,7 +356,7 @@
     lastMoveAt = now;
     const el = document.createElement("div");
     el.className = "frag";
-    el.textContent = pick(TRANSLATIONS);
+    el.textContent = pickTranslation();
     el.style.left = x + "px";
     el.style.top = y + "px";
     el.style.fontSize = "11px";
@@ -338,6 +399,52 @@
     setTimeout(() => el.remove(), 5800);
   }, 4000);
 
+  function explodeRabbit(el) {
+    if (!el.isConnected || el.dataset.exploded) return;
+    el.dataset.exploded = "1";
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    el.getAnimations().forEach(a => a.cancel());
+    el.style.transition = "opacity .18s ease-out";
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 220);
+
+    const count = Math.floor(rand(16, 26));
+    for (let k = 0; k < count; k++) {
+      const pool = pick(SHARD_POOLS);
+      const word = pick(pool);
+      const f = document.createElement("div");
+      f.className = "shard";
+      f.textContent = word;
+      f.style.left = cx + "px";
+      f.style.top = cy + "px";
+      f.style.fontSize = rand(9, 15) + "px";
+      const hot = Math.random() < 0.28;
+      f.style.color = hot
+        ? `rgba(217, 119, 87, ${rand(.5, .85)})`
+        : `hsla(${rand(20, 50)}, ${rand(0, 14)}%, ${rand(60, 84)}%, ${rand(.45, .8)})`;
+      document.body.appendChild(f);
+
+      const angle = rand(0, Math.PI * 2);
+      const dist = rand(50, 220);
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist - rand(0, 40);
+      const rot = rand(-200, 200);
+      const dur = rand(1500, 2600);
+      const peak = rand(.5, .9);
+
+      requestAnimationFrame(() => {
+        f.style.transition =
+          `opacity ${dur}ms ease-out, transform ${dur}ms cubic-bezier(.16,.84,.3,1)`;
+        f.style.opacity = peak;
+        f.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+      });
+      setTimeout(() => { f.style.opacity = "0"; }, dur * .55);
+      setTimeout(() => f.remove(), dur + 300);
+    }
+  }
+
   function spawnRabbit() {
     const el = document.createElement("div");
     el.className = "rabbit";
@@ -355,9 +462,21 @@
       ],
       { duration, easing: "linear" }
     );
+
+    const detonate = (e) => {
+      if (e) { e.stopPropagation(); e.preventDefault(); }
+      explodeRabbit(el);
+    };
+    el.addEventListener("click", detonate, { once: true });
+    el.addEventListener("touchstart", detonate, { once: true, passive: false });
+
+    if (Math.random() < 0.35) {
+      setTimeout(() => explodeRabbit(el), rand(duration * .22, duration * .85));
+    }
+
     setTimeout(spawnFragment, duration * .28);
     setTimeout(spawnFragment, duration * .55);
-    setTimeout(() => el.remove(), duration + 250);
+    setTimeout(() => { if (el.isConnected) el.remove(); }, duration + 250);
   }
 
   document.addEventListener("click", (e) => {
