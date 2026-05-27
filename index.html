@@ -261,15 +261,17 @@
   }
 
   let lastMove = 0;
-  document.addEventListener("mousemove", (e) => {
+  let lastMoveAt = performance.now();
+  function emitAt(x, y) {
     const now = performance.now();
     if (now - lastMove < 70) return;
     lastMove = now;
+    lastMoveAt = now;
     const el = document.createElement("div");
     el.className = "frag";
     el.textContent = pick(TRANSLATIONS);
-    el.style.left = e.clientX + "px";
-    el.style.top = e.clientY + "px";
+    el.style.left = x + "px";
+    el.style.top = y + "px";
     el.style.fontSize = "11px";
     el.style.color = `rgba(217, 119, 87, ${rand(.3, .65)})`;
     document.body.appendChild(el);
@@ -280,7 +282,35 @@
     });
     setTimeout(() => { el.style.opacity = "0"; }, 1200);
     setTimeout(() => el.remove(), 2800);
+  }
+  document.addEventListener("mousemove", (e) => emitAt(e.clientX, e.clientY), { passive: true });
+  document.addEventListener("touchmove", (e) => {
+    const t = e.touches[0]; if (t) emitAt(t.clientX, t.clientY);
   }, { passive: true });
+
+  const STILLNESS = [
+    "the linguist waits.",
+    "the field is quiet.",
+    "no rabbit yet.",
+    "still no agreement on the word.",
+    "the indeterminacy persists."
+  ];
+  setInterval(() => {
+    if (performance.now() - lastMoveAt < 9000) return;
+    lastMoveAt = performance.now();
+    const el = document.createElement("div");
+    el.className = "quote";
+    el.textContent = pick(STILLNESS);
+    el.style.left = "50%";
+    el.style.top = "78%";
+    el.style.transform = "translateX(-50%)";
+    el.style.textAlign = "center";
+    el.style.maxWidth = "28ch";
+    document.body.appendChild(el);
+    requestAnimationFrame(() => { el.style.opacity = ".55"; });
+    setTimeout(() => { el.style.opacity = "0"; }, 3800);
+    setTimeout(() => el.remove(), 5800);
+  }, 4000);
 
   function spawnRabbit() {
     const el = document.createElement("div");
