@@ -111,6 +111,20 @@
     will-change: opacity, transform;
     z-index: 6;
   }
+  .woosh {
+    position: fixed;
+    pointer-events: none;
+    font-family: ui-serif, Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    font-size: clamp(18px, 3.2vmin, 30px);
+    letter-spacing: .35em;
+    color: var(--fg);
+    text-shadow: 0 0 18px rgba(217, 119, 87, .35);
+    white-space: nowrap;
+    opacity: 0;
+    z-index: 7;
+    will-change: transform, opacity;
+  }
   .quote {
     position: fixed;
     max-width: 38ch;
@@ -170,54 +184,123 @@
 <script>
 (() => {
   const TRANSLATIONS = [
+    // ── classical Quine ──
     "rabbit",
     "undetached rabbit parts",
     "rabbit-stage",
     "rabbithood",
     "instance of leporid",
     "temporal slice (now)",
-    "this-here-furring",
     "fusion of rabbit-parts",
     "mereological sum",
+    "the rabbit-event",
+    "occurrence of a rabbit-property",
+    "rabbit fusion (mereological)",
+    "rabbit-now, rabbit-then",
+    "ontological relativity",
+    "inscrutability of reference",
+    "stimulus meaning",
+    "stimulus synonymy",
+    "occasion sentence",
+    "observation sentence",
+    "radical translation",
+    "the analytical hypothesis",
+    "deferred ostension",
+    "divided reference",
+    "proxy function",
+    "no entity without identity",
+    "desert landscapes",
+    "to be is to be the value of a variable",
+    "ontological commitment",
+    "first-order regimentation",
+    "mass term · count term",
+
+    // ── poetic / phenomenological ──
+    "this-here-furring",
     "the-one-that-ran",
     "presence-of-warmth",
     "ear · eye · fur · ear · foot",
     "(lo) food",
     "a thing leaping",
     "spatial extent of fur",
+    "a brief stretch of fur in time",
+    "an arrangement of attention",
+    "the linguist's finger trembles",
+    "fur briefly · then gone",
+    "the warmth that was here",
+    "the figure separates from the ground",
+    "what attention attended to",
+    "ostension fails",
+    "a presence and then not",
+
+    // ── ML-era ──
     "pattern recognized",
     "collection of pixels seen",
     "softmax → rabbit",
+    "softmax → ?",
+    "logits['rabbit'] = 4.2",
+    "logits['hare'] = 3.9",
     "token_47291",
+    "subword: 'rab' + 'bit'",
     "p(rabbit | context) = 0.34",
+    "p(rabbit | image) = 0.62",
     "model.predict(?)",
+    "model.predict() → None",
     "decoder hallucination",
     "attention head 7 · layer 12",
     "embedding[412] ≈ rabbit",
+    "embedding drift",
     "argmax of context",
+    "argmax over ontologies",
     "vector(0.14, -0.88, …)",
     "the latent that means rabbit",
     "prior over latents",
     "gradient of meaning",
-    "[unreferenced]",
-    "the named is not the name",
-    "indeterminate",
+    "next-token entropy: 2.1 bits",
+    "the feature that activates",
+    "polysemantic neuron",
+    "out of distribution",
+    "training-set echo",
+    "cosine sim 0.71 with 'hare'",
+    "chain-of-thought: fur · ears · leaping → ?",
+    "the model abstains",
+    "the model is uncertain",
+    "what the encoder kept",
+    "what the encoder dropped",
+    "in-context learning: rabbit",
+    "RAG retrieved: 'rabbit'",
+    "linear probe: rabbit",
+    "concept vector: rabbit-ness",
+
+    // ── behaviorist / field-manual ──
     "translation begins at home",
     "the one we agreed to call rabbit",
     "what the field linguist said",
-    "the rabbit-event",
-    "occurrence of a rabbit-property",
-    "rabbit fusion (mereological)",
-    "rabbit-now, rabbit-then",
-    "a brief stretch of fur in time",
-    "an arrangement of attention",
+    "stimulus equivalent",
+    "behaviorally identical",
+    "intersubstitutable",
+    "speech disposition",
+    "totality of speech dispositions",
+    "assent recorded",
+    "dissent recorded",
+    "two manuals, one field",
+    "compatible · incompatible",
+    "the manual proposes",
+    "same dispositions, different words",
+
+    // ── aporetic / refusal ──
+    "[unreferenced]",
+    "[no referent found]",
+    "[meaning withheld]",
+    "the named is not the name",
+    "indeterminate",
     "not-quite-rabbit",
     "the word for it",
     "the word, not the thing",
     "the thing, not the word",
-    "stimulus equivalent",
-    "behaviorally identical",
-    "intersubstitutable",
+    "translation paused",
+    "still resolving",
+    "the word does not arrive",
     "?",
     "?",
     "—"
@@ -254,17 +337,21 @@
 
   const RABBIT_PARTS = [
     "ear", "eye", "fur", "foot", "paw", "nose", "tail",
-    "flank", "whisker", "haunch", "the soft part",
-    "the warm part", "what was here a moment ago",
+    "flank", "whisker", "haunch", "ankle", "spine", "scut",
+    "the soft part", "the warm part", "the rustle",
+    "what was here a moment ago", "what just was",
     "undetached", "stage of —", "rabbit(t)", "rabbit(t-1)",
-    "rabbit(t+1)", "this-here-furring", "leporid · slice",
-    "fusion", "mereological sum", "a brief warmth"
+    "rabbit(t+1)", "before", "after",
+    "this-here-furring", "leporid · slice", "rabbit-property",
+    "fusion", "mereological sum", "a brief warmth",
+    "the figure", "the trace", "a moment of"
   ];
 
   const WORD_PIECES = [
     "ga", "va", "gai", "gav", "aga", "vagai",
     "g·", "·a·", "·gai", "—", "?", "g", "a", "i",
-    "g a v", "v a g", "·", "·-·", "…ai", "ga—"
+    "g a v", "v a g", "·", "·-·", "…ai", "ga—",
+    "ga·ga", "·vagai", "ai·", "g—i"
   ];
 
   const MEANING_PIECES = [
@@ -275,7 +362,11 @@
     "what the field linguist meant", "behaviorally identical",
     "stimulus equivalent", "translation manual A",
     "translation manual B", "incompatible · compatible",
-    "the meaning that didn't carry over"
+    "the meaning that didn't carry over",
+    "ontological residue", "stimulus echo",
+    "extension only", "reference deferred",
+    "the linguist's first guess", "the museum is empty",
+    "the second dogma", "the first dogma"
   ];
 
   const SHARD_POOLS = [RABBIT_PARTS, WORD_PIECES, MEANING_PIECES];
@@ -314,34 +405,65 @@
       "instance of leporid", "temporal slice (now)", "fusion of rabbit-parts",
       "mereological sum", "ear · eye · fur · ear · foot", "spatial extent of fur",
       "the rabbit-event", "occurrence of a rabbit-property",
-      "rabbit fusion (mereological)", "rabbit-now, rabbit-then"
+      "rabbit fusion (mereological)", "rabbit-now, rabbit-then",
+      "ontological relativity", "inscrutability of reference",
+      "stimulus meaning", "occasion sentence", "observation sentence",
+      "radical translation", "the analytical hypothesis", "deferred ostension",
+      "divided reference", "proxy function", "no entity without identity",
+      "desert landscapes", "to be is to be the value of a variable",
+      "ontological commitment", "first-order regimentation",
+      "mass term · count term"
     ],
     poetic: [
       "this-here-furring", "rabbithood", "the-one-that-ran",
       "presence-of-warmth", "ear · eye · fur · ear · foot",
       "a thing leaping", "spatial extent of fur",
       "rabbit-now, rabbit-then", "a brief stretch of fur in time",
-      "an arrangement of attention", "gradient of meaning"
+      "an arrangement of attention", "gradient of meaning",
+      "the linguist's finger trembles", "fur briefly · then gone",
+      "the warmth that was here", "the figure separates from the ground",
+      "what attention attended to", "ostension fails",
+      "a presence and then not"
     ],
     behaviorist: [
       "rabbit", "(lo) food", "translation begins at home",
       "the one we agreed to call rabbit", "what the field linguist said",
-      "the-one-that-ran", "stimulus equivalent",
-      "behaviorally identical", "intersubstitutable", "the word for it"
+      "the-one-that-ran", "stimulus equivalent", "stimulus synonymy",
+      "behaviorally identical", "intersubstitutable", "the word for it",
+      "speech disposition", "totality of speech dispositions",
+      "assent recorded", "dissent recorded", "two manuals, one field",
+      "compatible · incompatible", "the manual proposes",
+      "same dispositions, different words"
     ],
     mlera: [
-      "pattern recognized", "collection of pixels seen", "softmax → rabbit",
-      "token_47291", "p(rabbit | context) = 0.34", "model.predict(?)",
+      "pattern recognized", "collection of pixels seen",
+      "softmax → rabbit", "softmax → ?",
+      "logits['rabbit'] = 4.2", "logits['hare'] = 3.9",
+      "token_47291", "subword: 'rab' + 'bit'",
+      "p(rabbit | context) = 0.34", "p(rabbit | image) = 0.62",
+      "model.predict(?)", "model.predict() → None",
       "decoder hallucination", "attention head 7 · layer 12",
-      "embedding[412] ≈ rabbit", "argmax of context",
+      "embedding[412] ≈ rabbit", "embedding drift",
+      "argmax of context", "argmax over ontologies",
       "vector(0.14, -0.88, …)", "the latent that means rabbit",
-      "prior over latents", "gradient of meaning", "an arrangement of attention"
+      "prior over latents", "gradient of meaning",
+      "next-token entropy: 2.1 bits", "the feature that activates",
+      "polysemantic neuron", "out of distribution", "training-set echo",
+      "cosine sim 0.71 with 'hare'",
+      "chain-of-thought: fur · ears · leaping → ?",
+      "the model abstains", "the model is uncertain",
+      "what the encoder kept", "what the encoder dropped",
+      "in-context learning: rabbit", "RAG retrieved: 'rabbit'",
+      "linear probe: rabbit", "concept vector: rabbit-ness",
+      "an arrangement of attention"
     ],
     aporetic: [
-      "[unreferenced]", "the named is not the name", "indeterminate",
-      "not-quite-rabbit", "the word for it", "the word, not the thing",
-      "the thing, not the word", "decoder hallucination",
-      "?", "?", "—"
+      "[unreferenced]", "[no referent found]", "[meaning withheld]",
+      "the named is not the name", "indeterminate", "not-quite-rabbit",
+      "the word for it", "the word, not the thing", "the thing, not the word",
+      "translation paused", "still resolving", "the word does not arrive",
+      "decoder hallucination", "the model abstains",
+      "ostension fails", "?", "?", "—"
     ]
   };
 
@@ -604,6 +726,33 @@
     setTimeout(spawnFragment, duration * .55);
     setTimeout(() => { if (el.isConnected) el.remove(); }, duration + 250);
   }
+
+  // Once in a while: dogma dogma. (Two Dogmas of Empiricism, 1951.)
+  // The field linguist hears the syllable twice; so does the visitor.
+  function spawnDogma() {
+    const el = document.createElement("div");
+    el.className = "woosh";
+    el.textContent = "dogma   dogma";
+    const fromLeft = Math.random() < 0.5;
+    const y = rand(20, 78);
+    el.style.top = y + "vh";
+    el.style.left = (fromLeft ? -40 : 140) + "vw";
+    document.body.appendChild(el);
+    const duration = rand(1400, 2200);
+    el.animate(
+      [
+        { transform: "translateX(0)", opacity: 0 },
+        { opacity: .8, offset: .45 },
+        { transform: `translateX(${fromLeft ? 200 : -200}vw)`, opacity: 0 }
+      ],
+      { duration, easing: "cubic-bezier(.5,0,.5,1)" }
+    );
+    setTimeout(() => el.remove(), duration + 250);
+  }
+  function scheduleDogma() {
+    setTimeout(() => { spawnDogma(); scheduleDogma(); }, rand(90000, 240000));
+  }
+  scheduleDogma();
 
   document.addEventListener("click", (e) => {
     const el = document.createElement("div");
