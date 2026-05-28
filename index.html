@@ -293,24 +293,145 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-  // The page maintains a slowly-drifting "manual of translation":
-  // an overlapping subset of TRANSLATIONS that's weighted up.
-  // Every few minutes the subset rotates, so the lexicon you saw
-  // ten minutes ago is not quite the lexicon you see now.
+  // ── silent conditioning ────────────────────────────────────────────
+  // The page keeps a hidden distribution over five "manuals of
+  // translation". Visitor behavior (cursor speed, click cadence, idle
+  // time, rabbit-engagement, session age) nudges the distribution.
+  // The distribution biases which translations get sampled.
   // The visitor is never told which manual is active.
-  let manual = sampleManual();
-  function sampleManual() {
-    const size = Math.floor(rand(8, 16));
-    const seen = new Set();
-    while (seen.size < size) seen.add(Math.floor(Math.random() * TRANSLATIONS.length));
-    return [...seen];
+  //
+  //   classical    – Quine's own examples (mereology, stages, fusions)
+  //   poetic       – phenomenological / sensory translations
+  //   behaviorist  – stimulus-language, agreement, the field manual
+  //   mlera        – the LLM-era reading of the same problem
+  //   aporetic     – refusal: indeterminacy as the answer
+  //
+  // Translations can belong to more than one manual.
+
+  const MANUALS = {
+    classical: [
+      "rabbit", "undetached rabbit parts", "rabbit-stage", "rabbithood",
+      "instance of leporid", "temporal slice (now)", "fusion of rabbit-parts",
+      "mereological sum", "ear · eye · fur · ear · foot", "spatial extent of fur",
+      "the rabbit-event", "occurrence of a rabbit-property",
+      "rabbit fusion (mereological)", "rabbit-now, rabbit-then"
+    ],
+    poetic: [
+      "this-here-furring", "rabbithood", "the-one-that-ran",
+      "presence-of-warmth", "ear · eye · fur · ear · foot",
+      "a thing leaping", "spatial extent of fur",
+      "rabbit-now, rabbit-then", "a brief stretch of fur in time",
+      "an arrangement of attention", "gradient of meaning"
+    ],
+    behaviorist: [
+      "rabbit", "(lo) food", "translation begins at home",
+      "the one we agreed to call rabbit", "what the field linguist said",
+      "the-one-that-ran", "stimulus equivalent",
+      "behaviorally identical", "intersubstitutable", "the word for it"
+    ],
+    mlera: [
+      "pattern recognized", "collection of pixels seen", "softmax → rabbit",
+      "token_47291", "p(rabbit | context) = 0.34", "model.predict(?)",
+      "decoder hallucination", "attention head 7 · layer 12",
+      "embedding[412] ≈ rabbit", "argmax of context",
+      "vector(0.14, -0.88, …)", "the latent that means rabbit",
+      "prior over latents", "gradient of meaning", "an arrangement of attention"
+    ],
+    aporetic: [
+      "[unreferenced]", "the named is not the name", "indeterminate",
+      "not-quite-rabbit", "the word for it", "the word, not the thing",
+      "the thing, not the word", "decoder hallucination",
+      "?", "?", "—"
+    ]
+  };
+
+  const AFFINITY = {
+    classical:   { rabbitTouches: 1.6, clickRate:  0.3, idleness:  0.3, sessionAge: 0.2 },
+    poetic:      { mouseSpeed:  -0.6, idleness:    0.9, rabbitTouches: 0.2, sessionAge: 0.4 },
+    behaviorist: { mouseSpeed:   0.8, clickRate:   1.2, idleness:  -0.5 },
+    mlera:       { sessionAge:   0.7, idleness:    0.2, mouseSpeed:    -0.2 },
+    aporetic:    { mouseSpeed:  -0.4, clickRate:  -0.6, idleness:   1.1 }
+  };
+
+  const DEBUG = new URLSearchParams(location.search).has("debug");
+  const startedAt = performance.now();
+  let lastInputAt = startedAt;
+  let lastPos = null;
+  let clickPulses = [];
+  const feat = {
+    mouseSpeed: 0, clickRate: 0, idleness: 0, rabbitTouches: 0, sessionAge: 0
+  };
+  const dist = Object.fromEntries(
+    Object.keys(MANUALS).map(m => [m, 1 / Object.keys(MANUALS).length])
+  );
+
+  function trackMove(x, y) {
+    const now = performance.now();
+    if (lastPos) {
+      const dt = Math.max(16, now - lastPos.t);
+      const v = Math.hypot(x - lastPos.x, y - lastPos.y) / (dt / 1000);
+      feat.mouseSpeed = 0.9 * feat.mouseSpeed + 0.1 * v;
+    }
+    lastPos = { x, y, t: now };
+    lastInputAt = now;
   }
+  function trackClick() {
+    const now = performance.now();
+    clickPulses.push(now);
+    clickPulses = clickPulses.filter(t => now - t < 60000);
+    feat.clickRate = clickPulses.length;
+    lastInputAt = now;
+  }
+  function trackRabbitTouch() { feat.rabbitTouches += 1; }
+
+  // Capture phase so we count clicks even on elements that stopPropagation.
+  document.addEventListener("click", trackClick, true);
+  document.addEventListener("touchstart", trackClick, { passive: true, capture: true });
+
+  function squash(x, scale) { return Math.tanh(x / scale); }
+  function recomputeDistribution() {
+    const now = performance.now();
+    feat.idleness = 0.85 * feat.idleness + 0.15 * ((now - lastInputAt) / 1000);
+    feat.sessionAge = (now - startedAt) / 60000;
+    if (now - lastInputAt > 1000) feat.mouseSpeed *= 0.9;
+    const f = {
+      mouseSpeed:    squash(feat.mouseSpeed,    400),
+      clickRate:     squash(feat.clickRate,       6),
+      idleness:      squash(feat.idleness,        8),
+      rabbitTouches: squash(feat.rabbitTouches,   2),
+      sessionAge:    squash(feat.sessionAge,      3)
+    };
+    const raw = {};
+    for (const m in AFFINITY) {
+      let s = 0.2;
+      for (const k in AFFINITY[m]) s += AFFINITY[m][k] * f[k];
+      raw[m] = s;
+    }
+    const T = 1.4;
+    const exps = {};
+    for (const m in raw) exps[m] = Math.exp(raw[m] / T);
+    const Z = Object.values(exps).reduce((a, b) => a + b, 0);
+    for (const m in exps) dist[m] = 0.9 * dist[m] + 0.1 * (exps[m] / Z);
+    if (DEBUG) console.log(
+      "feat",
+      Object.fromEntries(Object.entries(feat).map(([k, v]) => [k, +v.toFixed(2)])),
+      "dist",
+      Object.fromEntries(Object.entries(dist).map(([k, v]) => [k, +v.toFixed(2)]))
+    );
+  }
+  setInterval(recomputeDistribution, 1000);
+
   function pickTranslation() {
-    return Math.random() < 0.62
-      ? TRANSLATIONS[pick(manual)]
-      : pick(TRANSLATIONS);
+    if (Math.random() < 0.3) return pick(TRANSLATIONS);
+    const r = Math.random();
+    let acc = 0;
+    for (const m in dist) {
+      acc += dist[m];
+      if (r < acc) return pick(MANUALS[m]);
+    }
+    return pick(TRANSLATIONS);
   }
-  setInterval(() => { manual = sampleManual(); }, 1000 * 60 * 2.5);
+  // ───────────────────────────────────────────────────────────────────
 
   function spawnFragment() {
     const el = document.createElement("div");
@@ -370,9 +491,13 @@
     setTimeout(() => { el.style.opacity = "0"; }, 1200);
     setTimeout(() => el.remove(), 2800);
   }
-  document.addEventListener("mousemove", (e) => emitAt(e.clientX, e.clientY), { passive: true });
+  document.addEventListener("mousemove", (e) => {
+    trackMove(e.clientX, e.clientY);
+    emitAt(e.clientX, e.clientY);
+  }, { passive: true });
   document.addEventListener("touchmove", (e) => {
-    const t = e.touches[0]; if (t) emitAt(t.clientX, t.clientY);
+    const t = e.touches[0];
+    if (t) { trackMove(t.clientX, t.clientY); emitAt(t.clientX, t.clientY); }
   }, { passive: true });
 
   const STILLNESS = [
@@ -402,6 +527,7 @@
   function explodeRabbit(el) {
     if (!el.isConnected || el.dataset.exploded) return;
     el.dataset.exploded = "1";
+    trackRabbitTouch();
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
